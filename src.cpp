@@ -6,8 +6,8 @@
 #include "sparkle.h"
 
 constexpr int FRAMERATE = 60;
-constexpr int NUM_SPARKLES = 10000;
-constexpr int VEL_RANGE[2] = { 0, 1500 };
+constexpr int NUM_SPARKLES = 5000;
+constexpr int VEL_RANGE[2] = { 1, 1500 };
 constexpr int THETA_RANGE[2] = { 0, 359 }; // degrees
 constexpr int FLY_TIME_RANGE[2] = { 750, 1000 }; // ms
 constexpr int BURST_TIME = 2000; // ms
@@ -103,15 +103,17 @@ int main() {
 			ClearBackground(BLACK);
 			for (int i = 0; i < NUM_SPARKLES; i++) {
 				Sparkle* currentSparkle = &sparkleMemory[i];
+
 				// update position
-				double unitVector[2] = { cos((*currentSparkle).angle * (PI / 180.)), sin((*currentSparkle).angle * (PI / 180.)) };
+				// u = < cos(theta), sin(theta) > identity for unit vector
+				double unitVector[2] = { cos((*currentSparkle).angle * (PI / 180.)),
+					sin((*currentSparkle).angle * (PI / 180.)) };
 				double velFactor = (*currentSparkle).vel * GetFrameTime();
 				double adjustedVector[2] = { unitVector[0] * velFactor, unitVector[1] * velFactor };
 				(*currentSparkle).pos[0] += adjustedVector[0];
 				(*currentSparkle).pos[1] += adjustedVector[1];
 
 				// draw
-				//DrawRectangle((*currentSparkle).pos[0], (*currentSparkle).pos[1], 10, 10, (*currentSparkle).color);
 				DrawPixel((int)(*currentSparkle).pos[0], (int)(*currentSparkle).pos[1], (*currentSparkle).color);
 			}
 			EndDrawing();
