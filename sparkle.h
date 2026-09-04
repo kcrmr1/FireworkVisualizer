@@ -2,8 +2,9 @@
 #include <raylib.h>
 
 typedef struct {
-	Color color;
+	bool fizzled;
 	int angle;
 	double pos[2];
 	double vel;
+	Color color;
 } Sparkle;

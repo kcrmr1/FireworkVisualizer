@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="FireworkVisualizer.vcxproj" />
+  <Project Path="FireworkVisualizer.vcxproj" Id="317c8ed4-dc43-48d5-9ab9-17028b996e57" />
 </Solution>
