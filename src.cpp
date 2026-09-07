@@ -7,21 +7,28 @@
 #include "sparkle.h"
 
 constexpr int FRAMERATE = 60;
-constexpr int NUM_SPARKLES = 10000;
-constexpr int VEL_RANGE[2] = { 1, 1500 };
+constexpr int NUM_SPARKLES = 50000;
+constexpr int VEL_RANGE[2] = { 1, 225 };
 constexpr int THETA_RANGE[2] = { 0, 359 }; // degrees
+constexpr int THETA_DOWN = 270;
 constexpr int FLY_TIME_RANGE[2] = { 750, 1000 }; // ms
 constexpr int BURST_TIME = 750; // ms
-constexpr int FIZZLE_TIME = 1250; // ms
+constexpr int FIZZLE_TIME = 2500; // ms
 constexpr int FIZZLE_CHANCE = 7; // %
-constexpr Color BG_COLOR = DARKBLUE;
+constexpr double GRAVITY = 125; // px / s^2
+constexpr Color BG_COLOR = BLACK;
 constexpr Color sparkleColors[] = {RED, GREEN, VIOLET, GOLD, PINK, ORANGE};
 
 void drawSky();
+void createSparkle(Sparkle* memoryPos);
+void updatePos(Sparkle* s);
+void applyGrav(Sparkle* s);
+void drawSparkle(Sparkle* s);
 
 int main() {
 	// initialization
 	InitWindow(0, 0, "firework visualizer");
+	ToggleFullscreen();
 	SetTargetFPS(FRAMERATE);
 	SetRandomSeed(time(NULL));
 
@@ -42,7 +49,7 @@ int main() {
 	while (!WindowShouldClose()) {
 		// clear bg
 		BeginDrawing();
-		ClearBackground(BG_COLOR);
+		drawSky();
 		EndDrawing();
 
 		// randomize firework launch values
@@ -52,20 +59,12 @@ int main() {
 		// prep sparkles
 		for (int i = 0; i < NUM_SPARKLES; i++) {
 			// instantiate sparkle
-			Sparkle sparkle = { .fizzled = false, .angle = GetRandomValue(THETA_RANGE[0], THETA_RANGE[1]),
-				.vel = (double)GetRandomValue(VEL_RANGE[0], VEL_RANGE[1]) };
-			sparkle.vel /= 10.;
-
-			// randomize color
-			int colorRand = GetRandomValue(1, sizeof(sparkleColors));
-			sparkle.color = sparkleColors[colorRand];
+			createSparkle(&sparkleMemory[i]);
+			Sparkle* s = &sparkleMemory[i];
 
 			// set x and y pos
-			sparkle.pos[0] = xLaunch;
-			sparkle.pos[1] = height - yLaunch;
-
-			// place sparkle in sparkle array
-			sparkleMemory[i] = sparkle;
+			(*s).pos[0] = xLaunch;
+			(*s).pos[1] = height - yLaunch;
 		}
 
 		// randomize flying
@@ -76,7 +75,7 @@ int main() {
 		while ((GetTime() - startFly) < randFlyTimeS && !WindowShouldClose()) {
 			int currentHeight = (int)(height - (yLaunch * ((GetTime() - startFly) / randFlyTimeS)));
 			BeginDrawing();
-			ClearBackground(BG_COLOR);
+			drawSky();
 			//DrawPixel(xLaunch, currentHeight, WHITE);
 			DrawRectangle(xLaunch - 1, currentHeight - 1, 3, 3, WHITE);
 			EndDrawing();
@@ -86,22 +85,16 @@ int main() {
 		double startBurst = GetTime();
 		while (GetTime() - startBurst < (BURST_TIME / 1000.) && !WindowShouldClose()) {
 			BeginDrawing();
-			ClearBackground(BG_COLOR);
+			drawSky();
 			for (int i = 0; i < NUM_SPARKLES; i++) {
 				Sparkle* currentSparkle = &sparkleMemory[i];
 
 				// update position
-				// u = < cos(theta), sin(theta) > identity for unit vector
-				double unitVector[2] = { cos((*currentSparkle).angle * (PI / 180.)),
-					sin((*currentSparkle).angle * (PI / 180.)) };
-				double velFactor = (*currentSparkle).vel * GetFrameTime();
-				double adjustedVector[2] = { unitVector[0] * velFactor, unitVector[1] * velFactor };
-				(*currentSparkle).pos[0] += adjustedVector[0];
-				(*currentSparkle).pos[1] += adjustedVector[1];
+				applyGrav(currentSparkle);
+				updatePos(currentSparkle);
 
 				// draw
-				DrawPixel((int)(*currentSparkle).pos[0], 
-					(int)(*currentSparkle).pos[1], (*currentSparkle).color);
+				drawSparkle(currentSparkle);
 			}
 			EndDrawing();
 		}
@@ -110,7 +103,7 @@ int main() {
 		double startFizzle = GetTime();
 		while (GetTime() - startFizzle < (FIZZLE_TIME / 1000.) && !WindowShouldClose()) {
 			BeginDrawing();
-			ClearBackground(BG_COLOR);
+			drawSky();
 			for (int i = 0; i < NUM_SPARKLES; i++) {
 				Sparkle* currentSparkle = &sparkleMemory[i];
 				bool shouldFizzle = (GetRandomValue(1, 100) <= FIZZLE_CHANCE) || (*currentSparkle).fizzled;
@@ -120,15 +113,10 @@ int main() {
 				if (!shouldFizzle) {
 					// update position
 					// u = < cos(theta), sin(theta) > identity for unit vector
-					double unitVector[2] = { cos((*currentSparkle).angle * (PI / 180.)),
-						sin((*currentSparkle).angle * (PI / 180.)) };
-					double velFactor = (*currentSparkle).vel * GetFrameTime();
-					double adjustedVector[2] = { unitVector[0] * velFactor, unitVector[1] * velFactor };
-					(*currentSparkle).pos[0] += adjustedVector[0];
-					(*currentSparkle).pos[1] += adjustedVector[1];
+					applyGrav(currentSparkle);
+					updatePos(currentSparkle);
 					// draw
-					DrawPixel((int)(*currentSparkle).pos[0], 
-						(int)(*currentSparkle).pos[1], (*currentSparkle).color);
+					drawSparkle(currentSparkle);
 				}
 			}
 			EndDrawing();
@@ -141,6 +129,45 @@ int main() {
 	CloseWindow();
 }
 
-void drawSky() {
+void createSparkle(Sparkle* memoryPos) {
+	double smoothFactor = 100;
+	double angle = GetRandomValue(THETA_RANGE[0]*smoothFactor, THETA_RANGE[1]*smoothFactor) / smoothFactor;
+	double vel = GetRandomValue(VEL_RANGE[0]*smoothFactor, VEL_RANGE[1]*smoothFactor) / smoothFactor;
+	int quadrant = ((int)angle / 90) + 1;
+	double remAngle = angle - quadrant*90;
 
+	double xVel;
+	double yVel;
+	// opp is y, adj is x
+	if (quadrant == 1 || quadrant == 3) {
+		yVel = sin(remAngle) * vel;
+		xVel = cos(remAngle) * vel;
+	} // opp is x, adj is y
+	else {
+		xVel = sin(remAngle) * vel;
+		yVel = cos(remAngle) * vel;
+	}
+	yVel *= -1; // ACCOUNT FOR AXIS DIFF
+
+	int colorRand = GetRandomValue(1, sizeof(sparkleColors));
+
+	Sparkle s = { .fizzled = false, .vel = { xVel, yVel }, .color = sparkleColors[colorRand] };
+
+	// place in memory
+	(*memoryPos) = s;
+}
+void drawSky() {
+	ClearBackground(BG_COLOR);
+}
+void applyGrav(Sparkle* s) {
+	(*s).vel[1] += GRAVITY * GetFrameTime();
+}
+// u = < cos(theta), sin(theta) > identity for unit vector
+void updatePos(Sparkle* s) {
+	(*s).pos[0] += (*s).vel[0] * GetFrameTime();
+	(*s).pos[1] += (*s).vel[1] * GetFrameTime();
+}
+void drawSparkle(Sparkle* s) {
+	DrawPixel((int)(*s).pos[0], (int)(*s).pos[1], (*s).color);
+	//DrawCircle((int)(*s).pos[0], (int)(*s).pos[1], 1, (*s).color);
 }

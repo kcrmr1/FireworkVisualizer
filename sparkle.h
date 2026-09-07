@@ -3,8 +3,7 @@
 
 typedef struct {
 	bool fizzled;
-	int angle;
+	double vel[2]; // x: + is right; y: + is up
 	double pos[2];
-	double vel;
 	Color color;
 } Sparkle;
